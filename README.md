@@ -36,7 +36,7 @@ cp .env.example .env                              # 填入 QWEN_API_KEY
 ## 服务器部署（生产）
 
 - 目录：`/root/ai-lab`，进程：pm2 `ai-lab`，端口：8002
-- 启动：`pm2 start /root/ai-lab/.venv/bin/uvicorn --name ai-lab --cwd /root/ai-lab -- app.main:app --host 127.0.0.1 --port 8002`
+- 启动：`pm2 start /root/ai-lab/.venv/bin/uvicorn --interpreter /root/ai-lab/.venv/bin/python --name ai-lab --cwd /root/ai-lab -- app.main:app --host 127.0.0.1 --port 8002`（必须指定 --interpreter，否则 pm2 会用 Node 执行 Python 脚本报 SyntaxError）
 - `.env` 仅存在于服务器，不入库
 
 ## API
