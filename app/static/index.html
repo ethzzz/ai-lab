@@ -74,7 +74,7 @@ let messages = [];   // 多轮上下文（前端内存保存，随请求完整�
 let busy = false;
 
 // ---------- 初始化：拉模型信息与预设 ----------
-fetch("/api/models").then(r => r.json()).then(j => {
+fetch("api/models").then(r => r.json()).then(j => {
   document.getElementById("modelName").textContent = j.model;
   for (const t of j.templates) {
     const o = document.createElement("option");
@@ -132,7 +132,7 @@ async function send() {
 
   let answer = "";
   try {
-    const res = await fetch("/api/chat", {
+    const res = await fetch("api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages, template: tplSel.value || "default" }),
