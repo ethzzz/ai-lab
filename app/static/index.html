@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ai-lab · 聊天</title>
+<style>
+  :root {
+    --bg: #fafafa; --panel: #ffffff; --border: #e4e4e7; --text: #27272a; --muted: #a1a1aa;
+    --accent: #6366f1; --user-bg: #eef2ff; --code-bg: #f4f4f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #18181b; --panel: #1f1f23; --border: #3f3f46; --text: #e4e4e7; --muted: #71717a;
+      --accent: #818cf8; --user-bg: #27273a; --code-bg: #27272a;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; height: 100vh; display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  header .title { font-size: 15px; font-weight: 600; }
+  header .model { font-size: 12px; color: var(--muted); }
+  header select { margin-left: auto; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 13px; }
+  header button { background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-size: 13px; cursor: pointer; }
+  header button:hover { color: var(--accent); border-color: var(--accent); }
+  #chat { flex: 1; overflow-y: auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 14px; }
+  .msg { max-width: 780px; width: fit-content; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.7; white-space: normal; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: var(--user-bg); border: 1px solid var(--border); }
+  .msg.assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); min-width: 60px; }
+  .msg.error { align-self: flex-start; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+  .msg p { margin: 0 0 8px; } .msg p:last-child { margin-bottom: 0; }
+  .msg pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; overflow-x: auto; margin: 8px 0; font-size: 13px; }
+  .msg code { font-family: ui-monospace, Consolas, monospace; }
+  .msg :not(pre) > code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font-size: 13px; }
+  .msg ul, .msg ol { padding-left: 22px; margin: 4px 0; }
+  .msg h1, .msg h2, .msg h3 { margin: 10px 0 6px; font-size: 15px; }
+  .cursor { display: inline-block; width: 8px; height: 15px; background: var(--accent); vertical-align: -2px; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .empty { margin: auto; text-align: center; color: var(--muted); font-size: 14px; line-height: 2; }
+  footer { padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--border); }
+  .input-row { display: flex; gap: 10px; max-width: 780px; margin: 0 auto; }
+  textarea { flex: 1; resize: none; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 14px; font-family: inherit; height: 46px; max-height: 140px; outline: none; }
+  textarea:focus { border-color: var(--accent); }
+  #send { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 0 20px; font-size: 14px; cursor: pointer; }
+  #send:disabled { opacity: .5; cursor: not-allowed; }
+</style>
+</head>
+<body>
+<header>
+  <span class="title">🤖 ai-lab</span>
+  <span class="model" id="modelName">…</span>
+  <select id="template" title="系统提示词预设"></select>
+  <button id="clear">清空会话</button>
+</header>
+
+<div id="chat">
+  <div class="empty" id="empty">向 AI 提问，开始对话<br>Enter 发送 · Shift+Enter 换行</div>
+</div>
+
+<footer>
+  <div class="input-row">
+    <textarea id="input" placeholder="输入消息…" rows="1"></textarea>
+    <button id="send">发送</button>
+  </div>
+</footer>
+
+<script>
+const chatEl = document.getElementById("chat");
+const inputEl = document.getElementById("input");
+const sendBtn = document.getElementById("send");
+const clearBtn = document.getElementById("clear");
+const tplSel = document.getElementById("template");
+let messages = [];   // 多轮上下文（前端内存保存，随请求完整上送）
+let busy = false;
+
+// ---------- 初始化：拉模型信息与预设 ----------
+fetch("/api/models").then(r => r.json()).then(j => {
+  document.getElementById("modelName").textContent = j.model;
+  for (const t of j.templates) {
+    const o = document.createElement("option");
+    o.value = t.key; o.textContent = t.label;
+    tplSel.appendChild(o);
+  }
+}).catch(() => {});
+
+// ---------- 轻量 Markdown 渲染（先转义再还原结构） ----------
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function renderMd(text) {
+  let html = esc(text);
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+    `<pre><code>${code.replace(/\n$/, "")}</code></pre>`);
+  html = html.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  html = html.replace(/^### (.*)$/gm, "<h3>$1</h3>");
+  html = html.replace(/^## (.*)$/gm, "<h2>$1</h2>");
+  html = html.replace(/^# (.*)$/gm, "<h1>$1</h1>");
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/^\s*[-*] (.*)$/gm, "<li>$1</li>");
+  html = html.replace(/^\s*\d+\. (.*)$/gm, "<li>$1</li>");
+  html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, "<ul>$1</ul>");
+  html = html.split(/\n{2,}/).map(p =>
+    /^<(h\d|pre|ul|ol)/.test(p.trim()) ? p : `<p>${p.replace(/\n/g, "<br>")}</p>`).join("");
+  return html;
+}
+
+function addMsg(role, text) {
+  const div = document.createElement("div");
+  div.className = "msg " + role;
+  div.innerHTML = role === "user" ? esc(text).replace(/\n/g, "<br>") : renderMd(text);
+  chatEl.appendChild(div);
+  document.getElementById("empty")?.remove();
+  chatEl.scrollTop = chatEl.scrollHeight;
+  return div;
+}
+
+// ---------- 发送：SSE 流式解析 ----------
+async function send() {
+  const content = inputEl.value.trim();
+  if (!content || busy) return;
+  busy = true; sendBtn.disabled = true;
+  inputEl.value = ""; inputEl.style.height = "46px";
+
+  messages.push({ role: "user", content });
+  addMsg("user", content);
+
+  const div = document.createElement("div");
+  div.className = "msg assistant";
+  div.innerHTML = '<span class="cursor"></span>';
+  chatEl.appendChild(div);
+  chatEl.scrollTop = chatEl.scrollHeight;
+
+  let answer = "";
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages, template: tplSel.value || "default" }),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parts = buf.split("\n\n");
+      buf = parts.pop();
+      for (const part of parts) {
+        const line = part.trim();
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim();
+        if (payload === "[DONE]") continue;
+        const obj = JSON.parse(payload);
+        if (obj.error) throw new Error(obj.error);
+        answer += obj.delta;
+        div.innerHTML = renderMd(answer) + '<span class="cursor"></span>';
+        chatEl.scrollTop = chatEl.scrollHeight;
+      }
+    }
+    messages.push({ role: "assistant", content: answer });
+    div.innerHTML = renderMd(answer) || '<span style="color:var(--muted)">（空回复）</span>';
+  } catch (e) {
+    div.remove();
+    messages.pop();  // 移除失败的 user 消息，允许重试
+    addMsg("error", "请求失败：" + e.message);
+  }
+  busy = false; sendBtn.disabled = false;
+  inputEl.focus();
+}
+
+sendBtn.addEventListener("click", send);
+clearBtn.addEventListener("click", () => {
+  messages = [];
+  chatEl.innerHTML = '<div class="empty" id="empty">向 AI 提问，开始对话</div>';
+});
+inputEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+});
+inputEl.addEventListener("input", () => {
+  inputEl.style.height = "46px";
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + "px";
+});
+</script>
+</body>
+</html>
