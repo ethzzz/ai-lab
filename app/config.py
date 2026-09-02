@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
     llm_model: str = "qwen3.8-max"
 
+    # 访问控制：访问码为空则不校验（本地开发）；限流 = 每 IP 每窗口最多 N 次 API 请求
+    access_code: str = ""
+    rate_limit_rpm: int = 20
+
 
 @lru_cache
 def get_settings() -> Settings:

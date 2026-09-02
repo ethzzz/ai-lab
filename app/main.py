@@ -9,14 +9,24 @@ import json
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from .config import get_settings
 from .llm.qwen import QwenProvider
 from .prompts.templates import TEMPLATES
+from .security import check_access_code, client_ip, limiter
 
 app = FastAPI(title="ai-lab")
 provider = QwenProvider()
+
+
+def guard(req: Request) -> JSONResponse | None:
+    """访问码 + 限流前置校验，放行返回 None。"""
+    if not check_access_code(req.headers.get("x-access-code", "")):
+        return JSONResponse({"error": "访问码不正确"}, status_code=401)
+    if not limiter.allow(client_ip(req)):
+        return JSONResponse({"error": "请求过于频繁，请稍后再试"}, status_code=429)
+    return None
 
 
 @app.get("/api/health")
@@ -25,7 +35,10 @@ async def health():
 
 
 @app.get("/api/models")
-async def models():
+async def models(req: Request):
+    denied = guard(req)
+    if denied:
+        return denied
     s = get_settings()
     return {
         "model": s.llm_model,
@@ -35,6 +48,9 @@ async def models():
 
 @app.post("/api/chat")
 async def chat(req: Request):
+    denied = guard(req)
+    if denied:
+        return denied
     body = await req.json()
     template = TEMPLATES.get(body.get("template") or "default", TEMPLATES["default"])
     messages = [

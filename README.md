@@ -32,6 +32,13 @@ cp .env.example .env                              # 填入 QWEN_API_KEY
 | `QWEN_API_KEY` | 百炼 Token Plan Key | 无（必填） |
 | `LLM_BASE_URL` | OpenAI 兼容网关 | Token Plan 网关 |
 | `LLM_MODEL` | 模型名 | `qwen3.8-max` |
+| `ACCESS_CODE` | 静态访问码（请求头 `X-Access-Code`），为空则不校验 | 空 |
+| `RATE_LIMIT_RPM` | 每 IP 每分钟最多 API 请求数 | 20 |
+
+## 访问控制
+
+- 配置 `ACCESS_CODE` 后，`/api/chat`、`/api/models` 需携带正确访问码（否则 401）；聊天页首次打开需输入访问码（存浏览器 localStorage）
+- 每 IP 滑动窗口限流（超限 429）；`/api/health` 保持开放供探活
 
 ## 服务器部署（生产）
 

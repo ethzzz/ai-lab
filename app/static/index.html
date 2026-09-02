@@ -43,9 +43,27 @@
   textarea:focus { border-color: var(--accent); }
   #send { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 0 20px; font-size: 14px; cursor: pointer; }
   #send:disabled { opacity: .5; cursor: not-allowed; }
+  /* 访问码遮罩层 */
+  #gate { position: fixed; inset: 0; background: var(--bg); display: none; align-items: center; justify-content: center; z-index: 10; }
+  .gate-box { display: flex; flex-direction: column; gap: 12px; width: 280px; padding: 28px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; }
+  .gate-title { font-size: 15px; font-weight: 600; text-align: center; }
+  #gateCode { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 14px; outline: none; }
+  #gateCode:focus { border-color: var(--accent); }
+  #gateBtn { padding: 9px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
+  #gateErr { color: #b91c1c; font-size: 12px; text-align: center; min-height: 16px; }
 </style>
 </head>
 <body>
+<!-- 访问码验证遮罩 -->
+<div id="gate">
+  <div class="gate-box">
+    <div class="gate-title">🔒 ai-lab 访问验证</div>
+    <input id="gateCode" type="password" placeholder="请输入访问码" autocomplete="off">
+    <button id="gateBtn">进入</button>
+    <div id="gateErr"></div>
+  </div>
+</div>
+
 <header>
   <span class="title">🤖 ai-lab</span>
   <span class="model" id="modelName">…</span>
@@ -73,15 +91,49 @@ const tplSel = document.getElementById("template");
 let messages = [];   // 多轮上下文（前端内存保存，随请求完整上送）
 let busy = false;
 
+// ---------- 访问码 ----------
+const gateEl = document.getElementById("gate");
+function apiHeaders() {
+  return { "X-Access-Code": localStorage.getItem("ailab_code") || "" };
+}
+function showGate() {
+  localStorage.removeItem("ailab_code");
+  gateEl.style.display = "flex";
+}
+function hideGate() { gateEl.style.display = "none"; }
+
 // ---------- 初始化：拉模型信息与预设 ----------
-fetch("api/models").then(r => r.json()).then(j => {
-  document.getElementById("modelName").textContent = j.model;
-  for (const t of j.templates) {
-    const o = document.createElement("option");
-    o.value = t.key; o.textContent = t.label;
-    tplSel.appendChild(o);
+function loadModels() {
+  fetch("api/models", { headers: apiHeaders() }).then(r => {
+    if (r.status === 401) { showGate(); throw new Error("unauthorized"); }
+    return r.json();
+  }).then(j => {
+    document.getElementById("modelName").textContent = j.model;
+    tplSel.innerHTML = "";
+    for (const t of j.templates) {
+      const o = document.createElement("option");
+      o.value = t.key; o.textContent = t.label;
+      tplSel.appendChild(o);
+    }
+  }).catch(() => {});
+}
+async function submitGate() {
+  const code = document.getElementById("gateCode").value.trim();
+  if (!code) return;
+  const res = await fetch("api/models", { headers: { "X-Access-Code": code } });
+  if (res.ok) {
+    localStorage.setItem("ailab_code", code);
+    hideGate();
+    loadModels();
+  } else {
+    document.getElementById("gateErr").textContent =
+      res.status === 429 ? "请求过于频繁，请稍后再试" : "访问码不正确";
   }
-}).catch(() => {});
+}
+document.getElementById("gateBtn").addEventListener("click", submitGate);
+document.getElementById("gateCode").addEventListener("keydown", (e) => { if (e.key === "Enter") submitGate(); });
+// 已存访问码则直接验证，否则弹出遮罩
+if (localStorage.getItem("ailab_code")) loadModels(); else showGate();
 
 // ---------- 轻量 Markdown 渲染（先转义再还原结构） ----------
 function esc(s) {
@@ -134,10 +186,15 @@ async function send() {
   try {
     const res = await fetch("api/chat", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...apiHeaders() },
       body: JSON.stringify({ messages, template: tplSel.value || "default" }),
     });
-    if (!res.ok) throw new Error("HTTP " + res.status);
+    if (res.status === 401) { showGate(); throw new Error("访问码已失效，请重新输入"); }
+    if (!res.ok) {
+      let msg = "HTTP " + res.status;
+      try { const j = await res.json(); if (j.error) msg = j.error; } catch {}
+      throw new Error(msg);
+    }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buf = "";
