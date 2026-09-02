@@ -34,11 +34,12 @@ cp .env.example .env                              # 填入 QWEN_API_KEY
 | `LLM_MODEL` | 模型名 | `qwen3.8-max` |
 | `ACCESS_CODE` | 静态访问码（请求头 `X-Access-Code`），为空则不校验 | 空 |
 | `RATE_LIMIT_RPM` | 每 IP 每分钟最多 API 请求数 | 20 |
+| `DB_PATH` | SQLite 数据库文件路径 | `data/ai-lab.db` |
 
 ## 访问控制
 
 - 配置 `ACCESS_CODE` 后，`/api/chat`、`/api/models` 需携带正确访问码（否则 401）；聊天页首次打开需输入访问码（存浏览器 localStorage）
-- 每 IP 滑动窗口限流（超限 429）；`/api/health` 保持开放供探活
+- 每 IP 滑动窗口限流（超限 429）；`/api/health` 保持开放供探活；会话接口同样需访问码
 
 ## 服务器部署（生产）
 
@@ -48,6 +49,11 @@ cp .env.example .env                              # 填入 QWEN_API_KEY
 
 ## API
 
-- `POST /api/chat`：body `{"messages": [{"role": "user", "content": "..."}], "template": "default"}`，SSE 逐块返回 `data: {"delta": "..."}`，结束 `data: [DONE]`，出错 `data: {"error": "..."}`
+- `POST /api/chat`：body `{"messages": [{"role": "user", "content": "..."}], "template": "default", "session_id": 1}`，SSE 逐块返回 `data: {"delta": "..."}`，结束 `data: [DONE]`，出错 `data: {"error": "..."}`；携带 `session_id` 时用户/助手消息自动落库（助手回复在流结束后保存）
 - `GET /api/models`：模型名 + 提示词预设列表
 - `GET /api/health`：探活
+- `GET /api/sessions`：会话列表（按更新时间倒序，最多 100 条）
+- `POST /api/sessions`：新建会话，可选 `{"title": "..."}`
+- `GET /api/sessions/{id}/messages`：会话全部消息（按时间正序）
+- `PUT /api/sessions/{id}`：重命名 `{"title": "..."}`
+- `DELETE /api/sessions/{id}`：删除会话及其全部消息

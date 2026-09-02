@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     access_code: str = ""
     rate_limit_rpm: int = 20
 
+    # 持久化：SQLite 数据库文件（相对路径基于进程 cwd）
+    db_path: str = "data/ai-lab.db"
+
 
 @lru_cache
 def get_settings() -> Settings:
