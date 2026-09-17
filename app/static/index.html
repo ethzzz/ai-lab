@@ -57,26 +57,9 @@
   .sess-del:hover { color: #b91c1c; }
   .sess-empty { color: var(--muted); font-size: 12px; text-align: center; padding: 16px 8px; }
   #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  /* 访问码遮罩层 */
-  #gate { position: fixed; inset: 0; background: var(--bg); display: none; align-items: center; justify-content: center; z-index: 10; }
-  .gate-box { display: flex; flex-direction: column; gap: 12px; width: 280px; padding: 28px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; }
-  .gate-title { font-size: 15px; font-weight: 600; text-align: center; }
-  #gateCode { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 14px; outline: none; }
-  #gateCode:focus { border-color: var(--accent); }
-  #gateBtn { padding: 9px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
-  #gateErr { color: #b91c1c; font-size: 12px; text-align: center; min-height: 16px; }
 </style>
 </head>
 <body>
-<!-- 访问码验证遮罩 -->
-<div id="gate">
-  <div class="gate-box">
-    <div class="gate-title">🔒 ai-lab 访问验证</div>
-    <input id="gateCode" type="password" placeholder="请输入访问码" autocomplete="off">
-    <button id="gateBtn">进入</button>
-    <div id="gateErr"></div>
-  </div>
-</div>
 
 <header>
   <span class="title">🤖 ai-lab</span>
@@ -112,21 +95,16 @@ let messages = [];   // 多轮上下文（前端内存保存，随请求完整�
 let busy = false;
 let currentSession = null;  // 当前会话 id；null 表示尚未创建（首次发送时自动建）
 
-// ---------- 访问码 ----------
-const gateEl = document.getElementById("gate");
-function apiHeaders() {
-  return { "X-Access-Code": localStorage.getItem("ailab_code") || "" };
+// ---------- SSO（nginx auth_request 统一门禁，未登录 401 -> 跳游戏中心登录页） ----------
+function apiHeaders() { return {}; }
+function gotoLogin() {
+  location.href = "/games/login?next=" + encodeURIComponent("/ailab/");
 }
-function showGate() {
-  localStorage.removeItem("ailab_code");
-  gateEl.style.display = "flex";
-}
-function hideGate() { gateEl.style.display = "none"; }
 
 // ---------- 初始化：拉模型信息与预设 ----------
 function loadModels() {
-  fetch("api/models", { headers: apiHeaders() }).then(r => {
-    if (r.status === 401) { showGate(); throw new Error("unauthorized"); }
+  fetch("api/models").then(r => {
+    if (r.status === 401) { gotoLogin(); throw new Error("unauthorized"); }
     return r.json();
   }).then(j => {
     document.getElementById("modelName").textContent = j.model;
@@ -138,24 +116,9 @@ function loadModels() {
     }
   }).catch(() => {});
 }
-async function submitGate() {
-  const code = document.getElementById("gateCode").value.trim();
-  if (!code) return;
-  const res = await fetch("api/models", { headers: { "X-Access-Code": code } });
-  if (res.ok) {
-    localStorage.setItem("ailab_code", code);
-    hideGate();
-    loadModels();
-    loadSessions();
-  } else {
-    document.getElementById("gateErr").textContent =
-      res.status === 429 ? "请求过于频繁，请稍后再试" : "访问码不正确";
-  }
-}
-document.getElementById("gateBtn").addEventListener("click", submitGate);
-document.getElementById("gateCode").addEventListener("keydown", (e) => { if (e.key === "Enter") submitGate(); });
-// 已存访问码则直接验证，否则弹出遮罩
-if (localStorage.getItem("ailab_code")) { loadModels(); loadSessions(); } else showGate();
+// 门禁已由 nginx SSO 接管：清理旧访问码残留，直接加载
+localStorage.removeItem("ailab_code");
+loadModels(); loadSessions();
 
 // ---------- 会话管理（后端持久化） ----------
 const sessionListEl = document.getElementById("sessionList");
@@ -165,8 +128,8 @@ function resetChatArea() {
 }
 async function loadSessions() {
   try {
-    const res = await fetch("api/sessions", { headers: apiHeaders() });
-    if (res.status === 401) { showGate(); return; }
+    const res = await fetch("api/sessions");
+    if (res.status === 401) { gotoLogin(); return; }
     const j = await res.json();
     sessionListEl.innerHTML = "";
     if (!j.items.length) {
@@ -284,7 +247,7 @@ async function send() {
       headers: { "Content-Type": "application/json", ...apiHeaders() },
       body: JSON.stringify({ messages, template: tplSel.value || "default", session_id: currentSession }),
     });
-    if (res.status === 401) { showGate(); throw new Error("访问码已失效，请重新输入"); }
+    if (res.status === 401) { gotoLogin(); throw new Error("登录已失效，正在跳转登录页…"); }
     if (!res.ok) {
       let msg = "HTTP " + res.status;
       try { const j = await res.json(); if (j.error) msg = j.error; } catch {}
