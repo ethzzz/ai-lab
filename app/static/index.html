@@ -57,32 +57,119 @@
   .sess-del:hover { color: #b91c1c; }
   .sess-empty { color: var(--muted); font-size: 12px; text-align: center; padding: 16px 8px; }
   #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  /* ===== 视图切换 tab ===== */
+  .tabs { display: flex; gap: 4px; margin-left: 8px; }
+  .tab { background: transparent; color: var(--muted); border: 1px solid transparent; border-radius: 8px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  .tab:hover { color: var(--accent); }
+  .tab.active { color: var(--accent); background: var(--user-bg); border-color: var(--border); font-weight: 600; }
+  body[data-view="resume"] #modelName, body[data-view="resume"] #template { display: none; }
+  .view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .view[hidden] { display: none; }
+  .side-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .side-pane[hidden] { display: none; }
+  #newResume { margin: 10px; padding: 8px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 13px; cursor: pointer; }
+  #historyList { flex: 1; overflow-y: auto; padding: 0 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+  /* ===== 简历优化视图 ===== */
+  .resume-wrap { flex: 1; display: grid; grid-template-columns: minmax(320px, 420px) 1fr; gap: 16px; padding: 16px; overflow-y: auto; align-items: start; }
+  .rz-pane { min-width: 0; }
+  .rz-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 0; }
+  .rz-h { font-size: 13px; font-weight: 600; }
+  .rz-drop { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px 12px; border: 1.5px dashed var(--border); border-radius: 10px; cursor: pointer; text-align: center; transition: border-color .15s, background .15s; }
+  .rz-drop:hover, .rz-drop.drag { border-color: var(--accent); background: var(--user-bg); }
+  .rz-drop-t { font-size: 13px; }
+  .rz-drop-s { font-size: 11px; color: var(--muted); }
+  .rz-input { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; outline: none; }
+  .rz-input:focus { border-color: var(--accent); }
+  .rz-text { resize: vertical; min-height: 180px; line-height: 1.6; }
+  .rz-row { display: flex; align-items: center; gap: 10px; }
+  .rz-muted { font-size: 12px; color: var(--muted); }
+  .rz-btn { margin-left: auto; background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; cursor: pointer; }
+  .rz-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .rz-status { font-size: 12px; color: var(--muted); min-height: 16px; }
+  .rz-status.err { color: #b91c1c; }
+  .rz-summary { background: var(--user-bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.6; margin-bottom: 12px; }
+  .rz-result { display: flex; flex-direction: column; gap: 12px; }
+  .rz-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 40px 16px; border: 1px dashed var(--border); border-radius: 12px; }
+  .rz-seg { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .rz-seg-h { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--accent); }
+  .rz-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .rz-col { border-radius: 8px; padding: 8px 10px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+  .rz-col-t { font-size: 11px; font-weight: 600; margin-bottom: 4px; opacity: .7; }
+  .rz-orig { background: var(--code-bg); border: 1px solid var(--border); color: var(--muted); }
+  .rz-opt { background: var(--user-bg); border: 1px solid var(--border); }
+  .rz-reason { margin-top: 10px; font-size: 12px; line-height: 1.6; background: var(--bg); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; padding: 8px 10px; }
+  @media (max-width: 860px) {
+    .resume-wrap { grid-template-columns: 1fr; }
+    .rz-card { position: static; }
+    .rz-diff { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
 
 <header>
   <span class="title">🤖 ai-lab</span>
+  <nav class="tabs">
+    <button class="tab active" data-view="chat">💬 聊天</button>
+    <button class="tab" data-view="resume">📄 简历优化</button>
+  </nav>
   <span class="model" id="modelName">…</span>
   <select id="template" title="系统提示词预设"></select>
 </header>
 
 <div id="layout">
   <aside id="sidebar">
-    <button id="newSession">＋ 新建会话</button>
-    <div id="sessionList"></div>
+    <div id="chatSide" class="side-pane">
+      <button id="newSession">＋ 新建会话</button>
+      <div id="sessionList"></div>
+    </div>
+    <div id="resumeSide" class="side-pane" hidden>
+      <button id="newResume">＋ 新建优化</button>
+      <div id="historyList"></div>
+    </div>
   </aside>
   <div id="main">
-    <div id="chat">
-      <div class="empty" id="empty">向 AI 提问，开始对话<br>Enter 发送 · Shift+Enter 换行</div>
+    <div id="chatView" class="view">
+      <div id="chat">
+        <div class="empty" id="empty">向 AI 提问，开始对话<br>Enter 发送 · Shift+Enter 换行</div>
+      </div>
+
+      <footer>
+        <div class="input-row">
+          <textarea id="input" placeholder="输入消息…" rows="1"></textarea>
+          <button id="send">发送</button>
+        </div>
+      </footer>
     </div>
 
-    <footer>
-      <div class="input-row">
-        <textarea id="input" placeholder="输入消息…" rows="1"></textarea>
-        <button id="send">发送</button>
+    <div id="resumeView" class="view" hidden>
+      <div class="resume-wrap">
+        <section class="rz-pane rz-left">
+          <div class="rz-card">
+            <div class="rz-h">① 上传简历</div>
+            <label class="rz-drop" id="rzDrop">
+              <input type="file" id="rzFile" accept=".docx,.pdf,.txt,.md" hidden>
+              <span class="rz-drop-t">📎 点击或拖拽文件到此处</span>
+              <span class="rz-drop-s">支持 .docx / .pdf / .txt / .md（≤5MB）</span>
+            </label>
+            <input id="rzTitle" class="rz-input" placeholder="简历标题" maxlength="60">
+            <div class="rz-h">② 校对文本（可编辑）</div>
+            <textarea id="rzText" class="rz-input rz-text" placeholder="解析出的简历文本会显示在这里，可手动修正后再优化…"></textarea>
+            <div class="rz-row">
+              <span id="rzChars" class="rz-muted"></span>
+              <button id="rzOptimize" class="rz-btn" disabled>✨ 开始优化</button>
+            </div>
+            <div id="rzStatus" class="rz-status"></div>
+          </div>
+        </section>
+        <section class="rz-pane rz-right">
+          <div id="rzSummary" class="rz-summary" hidden></div>
+          <div id="rzResult" class="rz-result">
+            <div class="rz-empty">优化结果将在这里以「原文 → 优化后 + 理由」分段并排展示。</div>
+          </div>
+        </section>
       </div>
-    </footer>
+    </div>
   </div>
 </div>
 
@@ -293,6 +380,163 @@ inputEl.addEventListener("keydown", (e) => {
 inputEl.addEventListener("input", () => {
   inputEl.style.height = "46px";
   inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + "px";
+});
+
+// ================= 视图切换（聊天 / 简历优化） =================
+const chatView = document.getElementById("chatView");
+const resumeView = document.getElementById("resumeView");
+const chatSide = document.getElementById("chatSide");
+const resumeSide = document.getElementById("resumeSide");
+function switchView(v) {
+  const resume = v === "resume";
+  document.body.setAttribute("data-view", resume ? "resume" : "chat");
+  chatView.hidden = resume; resumeView.hidden = !resume;
+  chatSide.hidden = resume; resumeSide.hidden = !resume;
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === v));
+  if (resume) loadHistory();
+}
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
+
+// ================= 简历优化 =================
+const rzFile = document.getElementById("rzFile");
+const rzDrop = document.getElementById("rzDrop");
+const rzTitle = document.getElementById("rzTitle");
+const rzText = document.getElementById("rzText");
+const rzChars = document.getElementById("rzChars");
+const rzOptimize = document.getElementById("rzOptimize");
+const rzStatus = document.getElementById("rzStatus");
+const rzResult = document.getElementById("rzResult");
+const rzSummary = document.getElementById("rzSummary");
+const historyList = document.getElementById("historyList");
+const RZ_EMPTY = '<div class="rz-empty">优化结果将在这里以「原文 → 优化后 + 理由」分段并排展示。</div>';
+let rzSourceName = "";
+
+function rzSetStatus(msg, isErr) {
+  rzStatus.textContent = msg || "";
+  rzStatus.classList.toggle("err", !!isErr);
+}
+function rzUpdateChars() {
+  const n = rzText.value.trim().length;
+  rzChars.textContent = n ? n + " 字" : "";
+  rzOptimize.disabled = !n;
+}
+rzText.addEventListener("input", rzUpdateChars);
+
+async function rzParseFile(file) {
+  if (!file) return;
+  rzSetStatus("解析中…");
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const res = await fetch("api/resume/parse", { method: "POST", body: fd, headers: apiHeaders() });
+    if (res.status === 401) { gotoLogin(); return; }
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || ("HTTP " + res.status));
+    rzTitle.value = j.title || "";
+    rzText.value = j.text || "";
+    rzSourceName = file.name;
+    rzUpdateChars();
+    rzSetStatus("已解析：" + file.name + "（" + j.chars + " 字），可校对后点「开始优化」");
+  } catch (e) {
+    rzSetStatus("解析失败：" + e.message, true);
+  }
+}
+rzFile.addEventListener("change", (e) => rzParseFile(e.target.files[0]));
+["dragenter", "dragover"].forEach(ev => rzDrop.addEventListener(ev, (e) => { e.preventDefault(); rzDrop.classList.add("drag"); }));
+["dragleave", "drop"].forEach(ev => rzDrop.addEventListener(ev, (e) => { e.preventDefault(); rzDrop.classList.remove("drag"); }));
+rzDrop.addEventListener("drop", (e) => { const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) rzParseFile(f); });
+
+function renderSegments(summary, segments) {
+  if (summary) { rzSummary.textContent = "📋 " + summary; rzSummary.hidden = false; }
+  else { rzSummary.hidden = true; }
+  if (!segments || !segments.length) { rzResult.innerHTML = '<div class="rz-empty">没有可展示的分段。</div>'; return; }
+  rzResult.innerHTML = segments.map(s => (
+    '<div class="rz-seg">' +
+      '<div class="rz-seg-h">📌 ' + esc(s.section || "未命名模块") + '</div>' +
+      '<div class="rz-diff">' +
+        '<div class="rz-col rz-orig"><div class="rz-col-t">原文</div>' + esc(s.original || "（无）") + '</div>' +
+        '<div class="rz-col rz-opt"><div class="rz-col-t">优化后</div>' + esc(s.optimized || "") + '</div>' +
+      '</div>' +
+      (s.reason ? '<div class="rz-reason">💡 ' + esc(s.reason) + '</div>' : '') +
+    '</div>'
+  )).join("");
+}
+
+rzOptimize.addEventListener("click", async () => {
+  const text = rzText.value.trim();
+  if (!text) return;
+  rzOptimize.disabled = true;
+  rzSetStatus("AI 正在优化，请稍候（约 10~30 秒）…");
+  rzResult.innerHTML = '<div class="rz-empty">⏳ 优化中…</div>';
+  rzSummary.hidden = true;
+  try {
+    const res = await fetch("api/resume/optimize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...apiHeaders() },
+      body: JSON.stringify({ text, title: rzTitle.value.trim(), source_name: rzSourceName }),
+    });
+    if (res.status === 401) { gotoLogin(); throw new Error("登录已失效，正在跳转登录页…"); }
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || ("HTTP " + res.status));
+    renderSegments(j.summary, j.segments);
+    rzSetStatus("✅ 优化完成，已存入历史（#" + j.id + "）");
+    loadHistory();
+  } catch (e) {
+    rzSetStatus("优化失败：" + e.message, true);
+    rzResult.innerHTML = '<div class="rz-empty">优化未完成，请重试。</div>';
+  }
+  rzUpdateChars();
+});
+
+// ---------- 优化历史 ----------
+async function loadHistory() {
+  try {
+    const res = await fetch("api/resume/history", { headers: apiHeaders() });
+    if (res.status === 401) { gotoLogin(); return; }
+    const j = await res.json();
+    historyList.innerHTML = "";
+    if (!j.items.length) { historyList.innerHTML = '<div class="sess-empty">暂无优化记录</div>'; return; }
+    for (const it of j.items) {
+      const item = document.createElement("div");
+      item.className = "sess";
+      const t = document.createElement("span");
+      t.className = "sess-title";
+      t.textContent = it.title || "未命名简历";
+      t.title = (it.title || "") + " · " + (it.segment_count || 0) + " 段 · " + it.created_at;
+      const del = document.createElement("button");
+      del.className = "sess-del"; del.textContent = "✕"; del.title = "删除记录";
+      del.addEventListener("click", (e) => { e.stopPropagation(); deleteHistory(it.id); });
+      item.append(t, del);
+      item.addEventListener("click", () => openHistory(it.id));
+      historyList.appendChild(item);
+    }
+  } catch {}
+}
+async function openHistory(id) {
+  try {
+    const res = await fetch("api/resume/history/" + id, { headers: apiHeaders() });
+    if (!res.ok) return;
+    const j = await res.json();
+    rzTitle.value = j.title || "";
+    rzText.value = j.raw_text || "";
+    rzSourceName = j.source_name || "";
+    rzUpdateChars();
+    renderSegments(j.summary, j.segments);
+    rzSetStatus("已载入历史记录 #" + id + "（" + j.created_at + "）");
+  } catch {}
+}
+async function deleteHistory(id) {
+  if (!confirm("删除这条优化记录？")) return;
+  await fetch("api/resume/history/" + id, { method: "DELETE", headers: apiHeaders() });
+  loadHistory();
+}
+document.getElementById("newResume").addEventListener("click", () => {
+  rzTitle.value = ""; rzText.value = ""; rzSourceName = "";
+  rzUpdateChars();
+  rzSummary.hidden = true;
+  rzResult.innerHTML = RZ_EMPTY;
+  rzSetStatus("");
+  rzFile.value = "";
 });
 </script>
 </body>

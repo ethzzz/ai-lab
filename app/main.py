@@ -16,11 +16,15 @@ from . import store
 from .config import get_settings
 from .llm.qwen import QwenProvider
 from .prompts.templates import TEMPLATES
+from .resume import store as resume_store
+from .resume.router import router as resume_router
 from .security import check_access_code, client_ip, limiter
 
 app = FastAPI(title="ai-lab")
 provider = QwenProvider()
 store.init_db()
+resume_store.init_db()
+app.include_router(resume_router)
 
 
 def guard(req: Request) -> JSONResponse | None:
