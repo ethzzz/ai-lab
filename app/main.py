@@ -27,6 +27,12 @@ resume_store.init_db()
 app.include_router(resume_router)
 
 
+@app.exception_handler(json.JSONDecodeError)
+async def bad_json_handler(req: Request, exc: json.JSONDecodeError):
+    """请求体不是合法 JSON 时返回 400，避免未捕获异常冒泡成 500。"""
+    return JSONResponse({"error": "请求体不是合法 JSON"}, status_code=400)
+
+
 def guard(req: Request) -> JSONResponse | None:
     """访问码 + 限流前置校验，放行返回 None。"""
     if not check_access_code(req.headers.get("x-access-code", "")):
