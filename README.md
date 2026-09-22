@@ -23,6 +23,14 @@ AI 知识库问答助手 —— 传统开发工程师转型 AI 工程师的分�
 - 数据：SQLite 表 `resume_optimizations`（`id, title, source_name, raw_text, result_json, model, created_at`）
 - 优化调用关闭 qwen3 思考链（`enable_thinking=false`），避免结构化长输出前长时间思考导致超时
 
+## 命令获取（独立应用）
+
+与聊天、简历优化并列的第三个应用（顶部 tab 切换）：输入自然语言操作意图（如「查看当前目录下的所有文件」）→ LLM 翻译成多系统等价命令 → 前端按操作系统分类卡片展示（命令 + 扩展参数逐项解释 + 注意事项 + 一键复制）→ 历史记录可回看/删除。默认覆盖 Linux（bash/zsh）、macOS（zsh）、Windows CMD、Windows PowerShell。
+
+- 代码：`app/cmdgen/`（`generator.py` LLM 生成、`store.py` 持久化、`router.py` 接口）
+- 数据：SQLite 表 `cmdgen_history`（`id, query, intent, result_json, model, created_at`）
+- 生成调用同样关闭 qwen3 思考链（`enable_thinking=false`），规避结构化输出超时
+
 ## 本地开发
 
 ```bash
@@ -71,3 +79,7 @@ cp .env.example .env                              # 填入 QWEN_API_KEY
 - `GET /api/resume/history`：历史列表 `{items:[{id, title, source_name, model, created_at, segment_count}]}`
 - `GET /api/resume/history/{id}`：详情（含 `raw_text` / `summary` / `segments`）
 - `DELETE /api/resume/history/{id}`：删除记录
+- `POST /api/cmdgen/generate`：body `{"text": "操作意图"}`，返回 `{id, intent, platforms:[{os, shell, command, params:[{flag, desc}], note}]}` 并落库；描述为空 400、LLM/解析失败 502/422
+- `GET /api/cmdgen/history`：历史列表 `{items:[{id, query, intent, model, created_at, platform_count}]}`
+- `GET /api/cmdgen/history/{id}`：详情（含 `query` / `intent` / `platforms`）
+- `DELETE /api/cmdgen/history/{id}`：删除记录

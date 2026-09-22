@@ -13,6 +13,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from . import store
+from .cmdgen import store as cmdgen_store
+from .cmdgen.router import router as cmdgen_router
 from .config import get_settings
 from .llm.qwen import QwenProvider
 from .prompts.templates import TEMPLATES
@@ -24,7 +26,9 @@ app = FastAPI(title="ai-lab")
 provider = QwenProvider()
 store.init_db()
 resume_store.init_db()
+cmdgen_store.init_db()
 app.include_router(resume_router)
+app.include_router(cmdgen_router)
 
 
 @app.exception_handler(json.JSONDecodeError)

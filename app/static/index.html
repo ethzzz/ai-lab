@@ -62,7 +62,7 @@
   .tab { background: transparent; color: var(--muted); border: 1px solid transparent; border-radius: 8px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
   .tab:hover { color: var(--accent); }
   .tab.active { color: var(--accent); background: var(--user-bg); border-color: var(--border); font-weight: 600; }
-  body[data-view="resume"] #modelName, body[data-view="resume"] #template { display: none; }
+  body:not([data-view="chat"]) #modelName, body:not([data-view="chat"]) #template { display: none; }
   .view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
   .view[hidden] { display: none; }
   .side-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; }
@@ -103,6 +103,26 @@
     .rz-card { position: static; }
     .rz-diff { grid-template-columns: 1fr; }
   }
+  /* ===== 命令获取视图 ===== */
+  .cg-wrap { flex: 1; display: grid; grid-template-columns: minmax(320px, 400px) 1fr; gap: 16px; padding: 16px; overflow-y: auto; align-items: start; }
+  .cg-result { display: flex; flex-direction: column; gap: 12px; }
+  .cg-intent { background: var(--user-bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.6; margin-bottom: 12px; }
+  .cg-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .cg-card-h { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .cg-os { font-size: 13px; font-weight: 600; color: var(--accent); }
+  .cg-shell { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 1px 8px; background: var(--bg); }
+  .cg-cmd { display: flex; align-items: center; gap: 8px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .cg-cmd code { flex: 1; font-family: ui-monospace, Consolas, monospace; font-size: 13.5px; word-break: break-all; white-space: pre-wrap; }
+  .cg-copy { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
+  .cg-copy:hover { color: var(--accent); border-color: var(--accent); }
+  .cg-params { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12.5px; }
+  .cg-params td { padding: 5px 8px; border-top: 1px solid var(--border); vertical-align: top; line-height: 1.6; }
+  .cg-flag { width: 1%; white-space: nowrap; font-family: ui-monospace, Consolas, monospace; color: var(--accent); }
+  .cg-note { margin-top: 10px; font-size: 12px; line-height: 1.6; background: var(--bg); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; padding: 8px 10px; color: var(--muted); }
+  .cg-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cg-chip { background: var(--bg); border: 1px solid var(--border); color: var(--muted); border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  .cg-chip:hover { color: var(--accent); border-color: var(--accent); }
+  @media (max-width: 860px) { .cg-wrap { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -112,6 +132,7 @@
   <nav class="tabs">
     <button class="tab active" data-view="chat">💬 聊天</button>
     <button class="tab" data-view="resume">📄 简历优化</button>
+    <button class="tab" data-view="cmdgen">🖥️ 命令获取</button>
   </nav>
   <span class="model" id="modelName">…</span>
   <select id="template" title="系统提示词预设"></select>
@@ -126,6 +147,10 @@
     <div id="resumeSide" class="side-pane" hidden>
       <button id="newResume">＋ 新建优化</button>
       <div id="historyList"></div>
+    </div>
+    <div id="cmdgenSide" class="side-pane" hidden>
+      <button id="newCmd">＋ 新建查询</button>
+      <div id="cmdHistoryList"></div>
     </div>
   </aside>
   <div id="main">
@@ -166,6 +191,36 @@
           <div id="rzSummary" class="rz-summary" hidden></div>
           <div id="rzResult" class="rz-result">
             <div class="rz-empty">优化结果将在这里以「原文 → 优化后 + 理由」分段并排展示。</div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div id="cmdgenView" class="view" hidden>
+      <div class="cg-wrap">
+        <section class="rz-pane">
+          <div class="rz-card">
+            <div class="rz-h">描述你想做的操作</div>
+            <textarea id="cgText" class="rz-input rz-text" placeholder="例如：查看当前目录下的所有文件（含隐藏文件）"></textarea>
+            <div class="cg-chips">
+              <button class="cg-chip" data-q="查看当前目录下的所有文件">查看目录文件</button>
+              <button class="cg-chip" data-q="查找占用某个端口的进程">查占用端口进程</button>
+              <button class="cg-chip" data-q="查看磁盘空间使用情况">查看磁盘空间</button>
+              <button class="cg-chip" data-q="实时滚动查看日志文件末尾">实时看日志</button>
+              <button class="cg-chip" data-q="递归删除文件夹及其所有内容">递归删文件夹</button>
+              <button class="cg-chip" data-q="压缩打包一个目录为压缩包">压缩打包目录</button>
+            </div>
+            <div class="rz-row">
+              <span class="rz-muted">按系统分类返回命令 + 参数说明</span>
+              <button id="cgGen" class="rz-btn" disabled>⚡ 获取命令</button>
+            </div>
+            <div id="cgStatus" class="rz-status"></div>
+          </div>
+        </section>
+        <section class="rz-pane">
+          <div id="cgIntent" class="cg-intent" hidden></div>
+          <div id="cgResult" class="cg-result">
+            <div class="rz-empty">命令结果将按操作系统分类展示在这里（Linux / macOS / Windows CMD / PowerShell）。</div>
           </div>
         </section>
       </div>
@@ -385,15 +440,26 @@ inputEl.addEventListener("input", () => {
 // ================= 视图切换（聊天 / 简历优化） =================
 const chatView = document.getElementById("chatView");
 const resumeView = document.getElementById("resumeView");
+const cmdgenView = document.getElementById("cmdgenView");
 const chatSide = document.getElementById("chatSide");
 const resumeSide = document.getElementById("resumeSide");
+const cmdgenSide = document.getElementById("cmdgenSide");
+const VIEWS = {
+  chat: [chatView, chatSide],
+  resume: [resumeView, resumeSide],
+  cmdgen: [cmdgenView, cmdgenSide],
+};
 function switchView(v) {
-  const resume = v === "resume";
-  document.body.setAttribute("data-view", resume ? "resume" : "chat");
-  chatView.hidden = resume; resumeView.hidden = !resume;
-  chatSide.hidden = resume; resumeSide.hidden = !resume;
+  if (!VIEWS[v]) v = "chat";
+  document.body.setAttribute("data-view", v);
+  for (const key in VIEWS) {
+    const on = key === v;
+    VIEWS[key][0].hidden = !on;
+    VIEWS[key][1].hidden = !on;
+  }
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === v));
-  if (resume) loadHistory();
+  if (v === "resume") loadHistory();
+  if (v === "cmdgen") loadCmdHistory();
 }
 document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
 
@@ -537,6 +603,147 @@ document.getElementById("newResume").addEventListener("click", () => {
   rzResult.innerHTML = RZ_EMPTY;
   rzSetStatus("");
   rzFile.value = "";
+});
+
+// ================= 命令获取 =================
+const cgText = document.getElementById("cgText");
+const cgGen = document.getElementById("cgGen");
+const cgStatus = document.getElementById("cgStatus");
+const cgResult = document.getElementById("cgResult");
+const cgIntent = document.getElementById("cgIntent");
+const cmdHistoryList = document.getElementById("cmdHistoryList");
+const CG_EMPTY = '<div class="rz-empty">命令结果将按操作系统分类展示在这里（Linux / macOS / Windows CMD / PowerShell）。</div>';
+
+function cgSetStatus(msg, isErr) {
+  cgStatus.textContent = msg || "";
+  cgStatus.classList.toggle("err", !!isErr);
+}
+function cgUpdateBtn() { cgGen.disabled = !cgText.value.trim(); }
+cgText.addEventListener("input", cgUpdateBtn);
+cgText.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (!cgGen.disabled) cgGen.click(); }
+});
+document.querySelectorAll(".cg-chip").forEach(c => c.addEventListener("click", () => {
+  cgText.value = c.dataset.q; cgUpdateBtn(); cgText.focus();
+}));
+
+function osIcon(os) {
+  const s = (os || "").toLowerCase();
+  if (s.includes("win")) return "🪟";
+  if (s.includes("mac") || s.includes("os x") || s.includes("darwin")) return "🍎";
+  if (s.includes("linux") || s.includes("ubuntu") || s.includes("unix")) return "🐧";
+  return "💻";
+}
+function renderPlatforms(intent, platforms) {
+  if (intent) { cgIntent.textContent = "🎯 " + intent; cgIntent.hidden = false; }
+  else { cgIntent.hidden = true; }
+  if (!platforms || !platforms.length) { cgResult.innerHTML = '<div class="rz-empty">没有可展示的命令。</div>'; return; }
+  cgResult.innerHTML = platforms.map((p, idx) => {
+    const params = (p.params || []).map(it =>
+      '<tr><td class="cg-flag">' + esc(it.flag || "") + '</td><td>' + esc(it.desc || "") + '</td></tr>'
+    ).join("");
+    return (
+      '<div class="cg-card">' +
+        '<div class="cg-card-h">' +
+          '<span class="cg-os">' + osIcon(p.os) + ' ' + esc(p.os || "其他") + '</span>' +
+          (p.shell ? '<span class="cg-shell">' + esc(p.shell) + '</span>' : '') +
+        '</div>' +
+        '<div class="cg-cmd"><code>' + esc(p.command || "") + '</code>' +
+          '<button class="cg-copy" data-idx="' + idx + '">复制</button></div>' +
+        (params ? '<table class="cg-params">' + params + '</table>' : '') +
+        (p.note ? '<div class="cg-note">💡 ' + esc(p.note) + '</div>' : '') +
+      '</div>'
+    );
+  }).join("");
+  cgResult.querySelectorAll(".cg-copy").forEach(btn => {
+    btn.addEventListener("click", () => copyText(platforms[+btn.dataset.idx].command || "", btn));
+  });
+}
+function copyText(text, btn) {
+  const done = () => { const o = btn.textContent; btn.textContent = "✓ 已复制"; setTimeout(() => btn.textContent = o, 1200); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else { fallbackCopy(text, done); }
+}
+function fallbackCopy(text, done) {
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); done(); } catch {}
+  document.body.removeChild(ta);
+}
+
+cgGen.addEventListener("click", async () => {
+  const text = cgText.value.trim();
+  if (!text) return;
+  cgGen.disabled = true;
+  cgSetStatus("AI 正在生成命令，请稍候…");
+  cgResult.innerHTML = '<div class="rz-empty">⏳ 生成中…</div>';
+  cgIntent.hidden = true;
+  try {
+    const res = await fetch("api/cmdgen/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...apiHeaders() },
+      body: JSON.stringify({ text }),
+    });
+    if (res.status === 401) { gotoLogin(); throw new Error("登录已失效，正在跳转登录页…"); }
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || ("HTTP " + res.status));
+    renderPlatforms(j.intent, j.platforms);
+    cgSetStatus("✅ 已生成 " + (j.platforms || []).length + " 个系统的命令，并存入历史（#" + j.id + "）");
+    loadCmdHistory();
+  } catch (e) {
+    cgSetStatus("生成失败：" + e.message, true);
+    cgResult.innerHTML = '<div class="rz-empty">生成未完成，请重试。</div>';
+  }
+  cgUpdateBtn();
+});
+
+// ---------- 命令历史 ----------
+async function loadCmdHistory() {
+  try {
+    const res = await fetch("api/cmdgen/history", { headers: apiHeaders() });
+    if (res.status === 401) { gotoLogin(); return; }
+    const j = await res.json();
+    cmdHistoryList.innerHTML = "";
+    if (!j.items.length) { cmdHistoryList.innerHTML = '<div class="sess-empty">暂无查询记录</div>'; return; }
+    for (const it of j.items) {
+      const item = document.createElement("div");
+      item.className = "sess";
+      const t = document.createElement("span");
+      t.className = "sess-title";
+      t.textContent = it.query || it.intent || "未命名查询";
+      t.title = (it.query || "") + " · " + (it.platform_count || 0) + " 系统 · " + it.created_at;
+      const del = document.createElement("button");
+      del.className = "sess-del"; del.textContent = "✕"; del.title = "删除记录";
+      del.addEventListener("click", (e) => { e.stopPropagation(); deleteCmdHistory(it.id); });
+      item.append(t, del);
+      item.addEventListener("click", () => openCmdHistory(it.id));
+      cmdHistoryList.appendChild(item);
+    }
+  } catch {}
+}
+async function openCmdHistory(id) {
+  try {
+    const res = await fetch("api/cmdgen/history/" + id, { headers: apiHeaders() });
+    if (!res.ok) return;
+    const j = await res.json();
+    cgText.value = j.query || "";
+    cgUpdateBtn();
+    renderPlatforms(j.intent, j.platforms);
+    cgSetStatus("已载入历史记录 #" + id + "（" + j.created_at + "）");
+  } catch {}
+}
+async function deleteCmdHistory(id) {
+  if (!confirm("删除这条命令记录？")) return;
+  await fetch("api/cmdgen/history/" + id, { method: "DELETE", headers: apiHeaders() });
+  loadCmdHistory();
+}
+document.getElementById("newCmd").addEventListener("click", () => {
+  cgText.value = ""; cgUpdateBtn();
+  cgIntent.hidden = true;
+  cgResult.innerHTML = CG_EMPTY;
+  cgSetStatus("");
 });
 </script>
 </body>
