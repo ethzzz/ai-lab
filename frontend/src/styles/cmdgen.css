@@ -1,0 +1,20 @@
+/* ===== 命令获取视图 ===== */
+.cg-wrap { flex: 1; display: grid; grid-template-columns: minmax(320px, 400px) 1fr; gap: 16px; padding: 16px; overflow-y: auto; align-items: start; }
+.cg-result { display: flex; flex-direction: column; gap: 12px; }
+.cg-intent { background: var(--user-bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.6; margin-bottom: 12px; }
+.cg-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.cg-card-h { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.cg-os { font-size: 13px; font-weight: 600; color: var(--accent); }
+.cg-shell { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 1px 8px; background: var(--bg); }
+.cg-cmd { display: flex; align-items: center; gap: 8px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.cg-cmd code { flex: 1; font-family: ui-monospace, Consolas, monospace; font-size: 13.5px; word-break: break-all; white-space: pre-wrap; }
+.cg-copy { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
+.cg-copy:hover { color: var(--accent); border-color: var(--accent); }
+.cg-params { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12.5px; }
+.cg-params td { padding: 5px 8px; border-top: 1px solid var(--border); vertical-align: top; line-height: 1.6; }
+.cg-flag { width: 1%; white-space: nowrap; font-family: ui-monospace, Consolas, monospace; color: var(--accent); }
+.cg-note { margin-top: 10px; font-size: 12px; line-height: 1.6; background: var(--bg); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; padding: 8px 10px; color: var(--muted); }
+.cg-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cg-chip { background: var(--bg); border: 1px solid var(--border); color: var(--muted); border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+.cg-chip:hover { color: var(--accent); border-color: var(--accent); }
+@media (max-width: 860px) { .cg-wrap { grid-template-columns: 1fr; } }

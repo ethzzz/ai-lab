@@ -1,7 +1,9 @@
 # ai-lab
 
 AI 知识库问答助手 —— 传统开发工程师转型 AI 工程师的分阶段练习项目。
-后端 Python（FastAPI），复用阿里云百炼 Token Plan（qwen3.8-max，OpenAI 兼容网关）。
+后端 Python（FastAPI），前端 React + Vite + TypeScript，复用阿里云百炼 Token Plan（qwen3.8-max，OpenAI 兼容网关）。
+
+前端为纯静态产物，构建后由 FastAPI 直接挂载，**单进程部署**（不引入独立前端服务、不改 nginx）。
 
 ## 阶段路线图
 
@@ -31,6 +33,50 @@ AI 知识库问答助手 —— 传统开发工程师转型 AI 工程师的分�
 - 数据：SQLite 表 `cmdgen_history`（`id, query, intent, result_json, model, created_at`）
 - 生成调用同样关闭 qwen3 思考链（`enable_thinking=false`），规避结构化输出超时
 
+## 前端（React + Vite + TypeScript）
+
+三个 agent（聊天 / 简历优化 / 命令获取）共用一套工程，顶部 tab 切换视图（**不使用 URL 路由**，
+避免 SPA fallback 需要改 nginx）。运行时依赖只有 `react` / `react-dom`：Markdown 渲染、SSE 解析、
+剪贴板复制均为自实现轻量工具，不引入 UI 库 / 路由库 / 状态库 / markdown 库。
+
+### 目录结构
+
+```
+frontend/
+├── index.html                 Vite 入口（<div id="root"> + /src/main.tsx）
+├── vite.config.ts             base:'./'、build.outDir:'../app/static/dist'
+├── tsconfig.json              strict + jsx:react-jsx
+└── src/
+    ├── main.tsx               挂载入口，导入三份 CSS
+    ├── App.tsx                视图状态机 + 模型/预设拉取 + 三个 feature 编排
+    ├── styles/                global.css / resume.css(.rz-*) / cmdgen.css(.cg-*)
+    ├── api/                   client.ts(fetch 封装) + types.ts + chat/sessions/resume/cmdgen
+    ├── lib/                   markdown.ts(renderMd) / sse.ts(streamChat) / copy.ts
+    ├── hooks/useHistory.ts    三个侧栏复用的历史列表 load/delete
+    ├── components/            Header / Sidebar / HistoryList / StatusText
+    └── features/
+        ├── chat/              useChat + ChatView + MessageBubble + ChatInput
+        ├── resume/            useResume + ResumeView + ResumeUploader + ResumeSegments
+        └── cmdgen/            useCmdgen + CmdgenView + PlatformCard
+```
+
+### 构建部署
+
+```bash
+cd frontend && npm install      # 首次；国内可加 --registry=https://registry.npmmirror.com
+npm run build                   # tsc --noEmit && vite build -> ../app/static/dist
+pm2 restart ai-lab              # 单进程：uvicorn 同时服务 API 与静态产物
+```
+
+- 产物落 `app/static/dist/`（`index.html` + `assets/`），已入 `.gitignore`，不入库
+- `app/main.py` 把 `/` 指向 `dist/index.html`，并在所有 API 路由注册之后挂载
+  `/assets` → `StaticFiles(dist/assets)`；`dist/assets` 不存在时跳过挂载
+- `vite.config.ts` 的 `base` **必须为 `'./'`**：nginx `location ^~ /ailab/` 用带尾斜杠的
+  `proxy_pass http://127.0.0.1:8002/;` 会剥离 `/ailab` 前缀，绝对路径资源会 404 白屏
+- 前端所有请求用**相对路径 `api/...`（无前导斜杠）**：写成 `/api/...` 会误命中同机的
+  notelab-java(:8001)
+- 本地开发可用 `npm run dev`（Vite dev server）或 `npm run preview` 预览产物
+
 ## 本地开发
 
 ```bash
@@ -40,7 +86,8 @@ cp .env.example .env                              # 填入 QWEN_API_KEY
 .venv/bin/uvicorn app.main:app --port 8002
 ```
 
-打开 `http://127.0.0.1:8002/` 即可对话。
+打开 `http://127.0.0.1:8002/` 即可对话（需先 `cd frontend && npm install && npm run build`
+生成 `app/static/dist`，否则根路径会因缺少产物返回 404）。
 
 ## 环境变量
 
@@ -61,6 +108,7 @@ cp .env.example .env                              # 填入 QWEN_API_KEY
 ## 服务器部署（生产）
 
 - 目录：`/root/ai-lab`，进程：pm2 `ai-lab`，端口：8002
+- 发布流程：`cd frontend && npm install && npm run build` → 产物 `app/static/dist` → `pm2 restart ai-lab`
 - 启动：`pm2 start /root/ai-lab/.venv/bin/uvicorn --interpreter /root/ai-lab/.venv/bin/python --name ai-lab --cwd /root/ai-lab -- app.main:app --host 127.0.0.1 --port 8002`（必须指定 --interpreter，否则 pm2 会用 Node 执行 Python 脚本报 SyntaxError）
 - `.env` 仅存在于服务器，不入库
 

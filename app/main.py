@@ -3,7 +3,7 @@
 - POST /api/chat    流式对话（可选 session_id，用户/助手消息自动落库）
 - GET  /api/models  可用模型与提示词预设
 - GET  /api/health  探活
-- GET  /            聊天页
+- GET  /            前端单页入口（React 构建产物 static/dist/index.html）
 - /api/sessions*    会话持久化（SQLite）
 """
 import json
@@ -11,6 +11,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import store
 from .cmdgen import store as cmdgen_store
@@ -21,6 +22,8 @@ from .prompts.templates import TEMPLATES
 from .resume import store as resume_store
 from .resume.router import router as resume_router
 from .security import check_access_code, client_ip, limiter
+
+DIST = Path(__file__).parent / "static" / "dist"
 
 app = FastAPI(title="ai-lab")
 provider = QwenProvider()
@@ -158,4 +161,12 @@ async def sessions_delete(req: Request, sid: int):
 
 @app.get("/")
 async def index():
-    return FileResponse(Path(__file__).parent / "static" / "index.html")
+    return FileResponse(DIST / "index.html")
+
+
+# ================= 前端静态产物（React + Vite 构建，单进程部署） =================
+# 构建产物目录：frontend/npm run build -> app/static/dist（vite base:'./'）。
+# mount 必须放在所有 API 路由注册之后，避免 /assets 抢占其他路径；
+# 未构建时（dist 不存在）跳过挂载，/ 会因文件缺失返回 404，便于及早发现漏构建。
+if (DIST / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
