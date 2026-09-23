@@ -18,7 +18,7 @@ AI 知识库问答助手 —— 传统开发工程师转型 AI 工程师的分�
 
 ## 简历优化（独立应用）
 
-与聊天并列的第二个应用（顶部 tab 切换）：上传 `.docx / .pdf / .txt / .md` 简历 → 提取纯文本（可人工校对）→ LLM 分段优化 → 前端「原文 | 优化后 + 💡理由」并排对比 → 历史记录可回看/删除。
+与聊天并列的第二个应用（顶部 tab / 路由 `/#/resume`）：上传 `.docx / .pdf / .txt / .md` 简历 → 提取纯文本（可人工校对）→ LLM 分段优化 → 前端「原文 | 优化后 + 💡理由」并排对比 → 历史记录可回看/删除。
 
 - 代码：`app/resume/`（`parser.py` 解析、`optimizer.py` LLM 优化、`store.py` 持久化、`router.py` 接口）
 - 依赖：`python-docx`（docx 段落+表格）、`pypdf`（文字版 pdf 逐页）；pdf 仅支持带文字层的版本，扫描版/加密版会报错
@@ -27,7 +27,7 @@ AI 知识库问答助手 —— 传统开发工程师转型 AI 工程师的分�
 
 ## 命令获取（独立应用）
 
-与聊天、简历优化并列的第三个应用（顶部 tab 切换）：输入自然语言操作意图（如「查看当前目录下的所有文件」）→ LLM 翻译成多系统等价命令 → 前端按操作系统分类卡片展示（命令 + 扩展参数逐项解释 + 注意事项 + 一键复制）→ 历史记录可回看/删除。默认覆盖 Linux（bash/zsh）、macOS（zsh）、Windows CMD、Windows PowerShell。
+与聊天、简历优化并列的第三个应用（顶部 tab / 路由 `/#/cmdgen`）：输入自然语言操作意图（如「查看当前目录下的所有文件」）→ LLM 翻译成多系统等价命令 → 前端按操作系统分类卡片展示（命令 + 扩展参数逐项解释 + 注意事项 + 一键复制）→ 历史记录可回看/删除。默认覆盖 Linux（bash/zsh）、macOS（zsh）、Windows CMD、Windows PowerShell。
 
 - 代码：`app/cmdgen/`（`generator.py` LLM 生成、`store.py` 持久化、`router.py` 接口）
 - 数据：SQLite 表 `cmdgen_history`（`id, query, intent, result_json, model, created_at`）
@@ -35,9 +35,60 @@ AI 知识库问答助手 —— 传统开发工程师转型 AI 工程师的分�
 
 ## 前端（React + Vite + TypeScript）
 
-三个 agent（聊天 / 简历优化 / 命令获取）共用一套工程，顶部 tab 切换视图（**不使用 URL 路由**，
-避免 SPA fallback 需要改 nginx）。运行时依赖只有 `react` / `react-dom`：Markdown 渲染、SSE 解析、
-剪贴板复制均为自实现轻量工具，不引入 UI 库 / 路由库 / 状态库 / markdown 库。
+三个 agent（聊天 / 简历优化 / 命令获取）共用一套工程，各自拥有**独立 URL 路由**，顶部 tab 即路由导航。
+运行时依赖只有 `react` / `react-dom` / `react-router-dom`：Markdown 渲染、SSE 解析、剪贴板复制
+均为自实现轻量工具，不引入 UI 库 / 状态库 / markdown 库。
+
+### 前端路由（HashRouter，三工具独立路由）
+
+| 路由 | 工具 | URL 示例 |
+|---|---|---|
+| `/#/chat` | 💬 聊天 | `http://…/ailab/#/chat` |
+| `/#/resume` | 📄 简历优化 | `http://…/ailab/#/resume` |
+| `/#/cmdgen` | 🖥️ 命令获取 | `http://…/ailab/#/cmdgen` |
+| `/`（根） | 重定向到 `/#/chat` | — |
+| 其它未匹配路径 | 重定向到 `/#/chat` | — |
+
+- **必须用 `HashRouter`，不用 `BrowserRouter`**：nginx `location ^~ /ailab/` 只把 `/` 交给 FastAPI
+  返回 `index.html`，真实深层路径（如 `/ailab/resume`）会 404；hash 位于 `#` 之后，服务端永远
+  只收到 `/ailab/`，因此**无需 SPA fallback、无需改 nginx / 后端**。`vite.config.ts` 的
+  `base:'./'` 与相对路径 `fetch('api/...')` 在 hash 路由下同样无需改动。
+- 路由表定义在 `frontend/src/routes.ts`（`ROUTES` / `DEFAULT_VIEW` / `viewFromPath`），
+  `App.tsx` 只负责声明路由与重定向。
+- **切换工具不丢状态**：`AppLayout.tsx` 是无路径布局路由渲染的**常驻**组件，三个 hook
+  （`useChat` / `useResume` / `useCmdgen`）与 `model` / `template` 状态都挂在这一层；三个 `.view`
+  与三个 `.side-pane` **始终全部挂载**，路由只通过 `hidden` 决定谁可见。因此聊天消息与当前会话、
+  输入框草稿、简历/命令的当前结果与选中历史，在 `/chat ↔ /resume ↔ /cmdgen` 之间来回切换时
+  全部保留（等价原 tab 行为）；浏览器前进/后退同样有效（tab 点击 = push 一条历史记录）。
+- 进入 `/resume`、`/cmdgen` 时触发对应 `reloadHistory()`，用 ref 记住上次视图去重，
+  **每次进入只请求一次**，视图内重渲染不会重复拉历史。
+- `body[data-view]` 机制保留：由当前路由派生 `view` 并写入 `document.body.dataset.view`，
+  CSS `body:not([data-view="chat"]) #modelName,#template{display:none}` 继续生效
+  （只有聊天视图显示模型名与提示词预设下拉）。
+- 顶栏 tab 是 react-router 的 `<Link to="/chat">`（渲染为 `<a href="#/chat">`），`.tab.active`
+  高亮由当前路由派生的 `view` 决定。
+
+### 顶栏「🏠 主页」返回入口
+
+`Header.tsx` 最左侧提供返回 home 门户的入口，**必须是原生锚点 `<a href="/">`**（整页跳出 SPA），
+不能用 react-router 的 `Link`（`Link` 只会在 hash 应用内导航到 `/` 并被重定向回 `/#/chat`）。
+样式类 `header a.home-btn` 复用 `header button` 观感（透明底 + `1px solid var(--border)` +
+6px 圆角 + hover 变 `var(--accent)`），并去掉锚点默认下划线与链接蓝色。
+
+### 布局高度（始终占满整个屏幕）
+
+React 化后所有内容都渲染在 `<div id="root">` 内，而 `body{height:100vh;display:flex;flex-direction:column}`
+的直接子元素正是 `#root`；若不显式给高度/flex，`#root` 只按内容撑开 → 页面不占满屏幕。
+`global.css` 里补齐高度链路：
+
+```css
+html, body, #root { height: 100%; }
+#root { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+```
+
+`#layout` / `#main` / `.view` 原本已有 `flex:1;min-height:0`，链路贯通后：页面无外层滚动条，
+header 固定顶部、footer / 输入区固定底部，中间 `#chat` 与简历/命令结果区内部滚动，
+浏览器窗口任意高度都占满。
 
 ### 目录结构
 
@@ -48,12 +99,14 @@ frontend/
 ├── tsconfig.json              strict + jsx:react-jsx
 └── src/
     ├── main.tsx               挂载入口，导入三份 CSS
-    ├── App.tsx                视图状态机 + 模型/预设拉取 + 三个 feature 编排
-    ├── styles/                global.css / resume.css(.rz-*) / cmdgen.css(.cg-*)
+    ├── App.tsx                HashRouter + 路由表（三工具独立路由 + 根/未匹配重定向）
+    ├── AppLayout.tsx          常驻布局：三个 hook + 模型/预设 + Header/Sidebar，按路由 hidden 显隐视图
+    ├── routes.ts              路由表（ROUTES / DEFAULT_VIEW / viewFromPath）
+    ├── styles/                global.css(含 html/body/#root 高度链路 + .home-btn) / resume.css(.rz-*) / cmdgen.css(.cg-*)
     ├── api/                   client.ts(fetch 封装) + types.ts + chat/sessions/resume/cmdgen
     ├── lib/                   markdown.ts(renderMd) / sse.ts(streamChat) / copy.ts
     ├── hooks/useHistory.ts    三个侧栏复用的历史列表 load/delete
-    ├── components/            Header / Sidebar / HistoryList / StatusText
+    ├── components/            Header(返回主页 <a href="/"> + tab Link) / Sidebar / HistoryList / StatusText
     └── features/
         ├── chat/              useChat + ChatView + MessageBubble + ChatInput
         ├── resume/            useResume + ResumeView + ResumeUploader + ResumeSegments
@@ -75,7 +128,9 @@ pm2 restart ai-lab              # 单进程：uvicorn 同时服务 API 与静态
   `proxy_pass http://127.0.0.1:8002/;` 会剥离 `/ailab` 前缀，绝对路径资源会 404 白屏
 - 前端所有请求用**相对路径 `api/...`（无前导斜杠）**：写成 `/api/...` 会误命中同机的
   notelab-java(:8001)
-- 本地开发可用 `npm run dev`（Vite dev server）或 `npm run preview` 预览产物
+- 本地开发可用 `npm run dev`（Vite dev server）或 `npm run preview` 预览产物；
+  深链（如 `/#/resume`）在 dev / preview / 生产下行为一致，因为路由信息全在 `#` 之后
+- 运行时依赖仅 `react` / `react-dom` / `react-router-dom`（新增路由能力时**只**加了 react-router-dom）
 
 ## 本地开发
 

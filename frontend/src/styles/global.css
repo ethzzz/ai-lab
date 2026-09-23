@@ -10,6 +10,13 @@
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; height: 100vh; display: flex; flex-direction: column; }
+/* ===== 高度链路：占满整个屏幕（React 化后所有内容都在 #root 内） ===== */
+/* body 的直接子元素是 #root，若不显式给高度/flex，body{height:100vh;display:flex} */
+/* 只会让 #root 按内容撑开 -> 页面不占满屏幕。补全链路后：#root 填满 body 并作为 */
+/* Header + #layout 的 flex 列容器；#layout / #main / .view 已有 flex:1;min-height:0， */
+/* 于是 header 固定顶部、footer/输入区固定底部，中间区域内部滚动，无外层滚动条。 */
+html, body, #root { height: 100%; }
+#root { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 header { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
 header .title { font-size: 15px; font-weight: 600; }
 header .model { font-size: 12px; color: var(--muted); }
@@ -36,6 +43,10 @@ textarea { flex: 1; resize: none; background: var(--bg); color: var(--text); bor
 textarea:focus { border-color: var(--accent); }
 #send { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 0 20px; font-size: 14px; cursor: pointer; }
 #send:disabled { opacity: .5; cursor: not-allowed; }
+/* ===== 返回主页（原生 <a href="/">，整页跳出 SPA 回 home 门户） ===== */
+/* 观感与 `header button` 一致，额外去掉锚点默认下划线与链接蓝色。 */
+header a.home-btn { display: inline-flex; align-items: center; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-size: 13px; cursor: pointer; text-decoration: none; }
+header a.home-btn:hover { color: var(--accent); border-color: var(--accent); }
 /* ===== 布局与侧栏（三个 agent 复用） ===== */
 #layout { flex: 1; display: flex; min-height: 0; }
 #sidebar { width: 220px; border-right: 1px solid var(--border); background: var(--panel); display: flex; flex-direction: column; }
@@ -52,7 +63,7 @@ textarea:focus { border-color: var(--accent); }
 #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 /* ===== 视图切换 tab ===== */
 .tabs { display: flex; gap: 4px; margin-left: 8px; }
-.tab { background: transparent; color: var(--muted); border: 1px solid transparent; border-radius: 8px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+.tab { background: transparent; color: var(--muted); border: 1px solid transparent; border-radius: 8px; padding: 5px 12px; font-size: 13px; cursor: pointer; text-decoration: none; }
 .tab:hover { color: var(--accent); }
 .tab.active { color: var(--accent); background: var(--user-bg); border-color: var(--border); font-weight: 600; }
 body:not([data-view="chat"]) #modelName, body:not([data-view="chat"]) #template { display: none; }

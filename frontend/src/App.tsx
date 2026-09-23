@@ -1,107 +1,43 @@
-import { useCallback, useEffect, useState } from 'react'
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 
-import { getModels } from './api/chat'
-import type { Template, ViewKey } from './api/types'
-import Header from './components/Header'
-import Sidebar from './components/Sidebar'
-import type { PaneProps } from './components/Sidebar'
-import { useChat } from './features/chat/useChat'
-import ChatView from './features/chat/ChatView'
-import { useCmdgen } from './features/cmdgen/useCmdgen'
-import CmdgenView from './features/cmdgen/CmdgenView'
-import { useResume } from './features/resume/useResume'
-import ResumeView from './features/resume/ResumeView'
+import AppLayout from './AppLayout'
+import { DEFAULT_PATH, ROUTES } from './routes'
 
 /**
- * 应用编排：视图 tab 状态 + 模型/预设 + 三个 agent 的状态与回调。
- * 等价原 index.html 的 switchView / VIEWS：body[data-view] 供 CSS 隐藏
- * #modelName / #template，三个 .view 与三个 .side-pane 用 hidden 显隐。
+ * 路由壳：三个工具各占一条独立路由（HashRouter），URL 形如 /ailab/#/chat。
+ *
+ * 用 HashRouter 而非 BrowserRouter 的原因：nginx `location ^~ /ailab/` 只把 `/`
+ * 交给 FastAPI 返回 index.html，真实深层路径（/ailab/resume）会 404；hash 位于
+ * `#` 之后，服务端永远只收到 /ailab/，因此无需改 nginx / 后端，
+ * vite 的 base:'./' 与相对路径 fetch('api/...') 也全部保持不变。
+ *
+ * 保状态：三个工具共用**同一个** AppLayout 实例（无路径布局路由 + 模块级固定
+ * element 引用 LAYOUT），路由切换只改变 AppLayout 内部由 useLocation 派生的
+ * view，不会卸载重建它，因此三个 hook 的内存态（消息/会话/草稿/结果）全部保留。
+ *
+ * 子路由只负责「匹配」，不负责渲染：视图由 AppLayout 用 hidden 显隐（三个 View 始终挂载），
+ * 布局里没有 <Outlet/>，所以子路由元素统一用返回 null 的 EmptyRoute（显式给 element
+ * 也能避免 react-router 对「叶子路由没有 element」的开发期告警）。
  */
+const LAYOUT = <AppLayout />
+function EmptyRoute() {
+  return null
+}
+const EMPTY = <EmptyRoute />
+
 export default function App() {
-  const [view, setView] = useState<ViewKey>('chat')
-  const [model, setModel] = useState('')
-  const [templates, setTemplates] = useState<Template[]>([])
-  const [template, setTemplate] = useState('')
-
-  const chat = useChat(template)
-  const resume = useResume()
-  const cmdgen = useCmdgen()
-
-  // body[data-view] 驱动 CSS（非聊天视图隐藏模型名与预设下拉）
-  useEffect(() => {
-    document.body.dataset.view = view
-  }, [view])
-
-  // 拉模型信息与提示词预设（默认选中第一项，与原 select 首个 option 一致）
-  useEffect(() => {
-    getModels()
-      .then((j) => {
-        setModel(j.model)
-        setTemplates(j.templates || [])
-        if (j.templates && j.templates.length) setTemplate(j.templates[0].key)
-      })
-      .catch(() => {
-        /* 静默失败（401 已在 client 内跳转登录） */
-      })
-  }, [])
-
-  // 切换视图时加载对应历史（等价原 switchView 里的 loadHistory / loadCmdHistory）
-  const onViewChange = useCallback(
-    (v: ViewKey) => {
-      setView(v)
-      if (v === 'resume') resume.reloadHistory()
-      if (v === 'cmdgen') cmdgen.reloadHistory()
-    },
-    [resume.reloadHistory, cmdgen.reloadHistory],
-  )
-
-  const chatPane: PaneProps = {
-    newLabel: '＋ 新建会话',
-    onNew: chat.onNewSession,
-    items: chat.sessions,
-    emptyText: '暂无会话，点上方新建或直接提问',
-    deleteTitle: '删除会话',
-    activeId: chat.sessionId,
-    onOpen: chat.onOpenSession,
-    onDelete: chat.onDeleteSession,
-  }
-  const resumePane: PaneProps = {
-    newLabel: '＋ 新建优化',
-    onNew: resume.onNew,
-    items: resume.history,
-    emptyText: '暂无优化记录',
-    deleteTitle: '删除记录',
-    onOpen: resume.onOpenHistory,
-    onDelete: resume.onDeleteHistory,
-  }
-  const cmdgenPane: PaneProps = {
-    newLabel: '＋ 新建查询',
-    onNew: cmdgen.onNew,
-    items: cmdgen.history,
-    emptyText: '暂无查询记录',
-    deleteTitle: '删除记录',
-    onOpen: cmdgen.onOpenHistory,
-    onDelete: cmdgen.onDeleteHistory,
-  }
-
   return (
-    <>
-      <Header
-        view={view}
-        onViewChange={onViewChange}
-        model={model}
-        templates={templates}
-        template={template}
-        onTemplateChange={setTemplate}
-      />
-      <div id="layout">
-        <Sidebar view={view} chat={chatPane} resume={resumePane} cmdgen={cmdgenPane} />
-        <div id="main">
-          <ChatView c={chat} hidden={view !== 'chat'} />
-          <ResumeView r={resume} hidden={view !== 'resume'} />
-          <CmdgenView g={cmdgen} hidden={view !== 'cmdgen'} />
-        </div>
-      </div>
-    </>
+    <HashRouter>
+      <Routes>
+        <Route element={LAYOUT}>
+          {ROUTES.map((r) => (
+            <Route key={r.view} path={r.path} element={EMPTY} />
+          ))}
+        </Route>
+        {/* 根路径与任何未匹配路径都回到聊天视图（等价原默认 tab） */}
+        <Route path="/" element={<Navigate to={DEFAULT_PATH} replace />} />
+        <Route path="*" element={<Navigate to={DEFAULT_PATH} replace />} />
+      </Routes>
+    </HashRouter>
   )
 }
