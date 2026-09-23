@@ -5,6 +5,7 @@
 - GET  /api/health  探活
 - GET  /            前端单页入口（React 构建产物 static/dist/index.html）
 - /api/sessions*    会话持久化（SQLite）
+- 业务 API 统一走 app.security.guard：强制 C 端登录（X-Auth-User）+ 访问码 + 限流；/api/health 开放
 """
 import json
 from pathlib import Path
@@ -21,7 +22,7 @@ from .llm.qwen import QwenProvider
 from .prompts.templates import TEMPLATES
 from .resume import store as resume_store
 from .resume.router import router as resume_router
-from .security import check_access_code, client_ip, limiter
+from .security import guard
 
 DIST = Path(__file__).parent / "static" / "dist"
 
@@ -38,15 +39,6 @@ app.include_router(cmdgen_router)
 async def bad_json_handler(req: Request, exc: json.JSONDecodeError):
     """请求体不是合法 JSON 时返回 400，避免未捕获异常冒泡成 500。"""
     return JSONResponse({"error": "请求体不是合法 JSON"}, status_code=400)
-
-
-def guard(req: Request) -> JSONResponse | None:
-    """访问码 + 限流前置校验，放行返回 None。"""
-    if not check_access_code(req.headers.get("x-access-code", "")):
-        return JSONResponse({"error": "访问码不正确"}, status_code=401)
-    if not limiter.allow(client_ip(req)):
-        return JSONResponse({"error": "请求过于频繁，请稍后再试"}, status_code=429)
-    return None
 
 
 @app.get("/api/health")

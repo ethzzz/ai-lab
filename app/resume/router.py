@@ -1,27 +1,19 @@
 """简历优化 API：/api/resume/*（解析、优化、历史 CRUD）。
 
-统一走访问码 + 每 IP 限流（复用 app.security）；nginx SSO 门禁在上游，未登录到不了这里。
+统一走 app.security.guard：强制 C 端登录（nginx 透传的 X-Auth-User，仅认 c: 前缀）+ 访问码 + 每 IP 限流；
+非 C 端登录用户（含 B 端管理员）一律 401。
 """
 from fastapi import APIRouter, File, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from ..config import get_settings
-from ..security import check_access_code, client_ip, limiter
+from ..security import guard
 from . import optimizer, parser, store
 
 router = APIRouter(prefix="/api/resume", tags=["resume"])
 
 MAX_UPLOAD = 5 * 1024 * 1024   # 与 parser.MAX_BYTES 一致
 MAX_TEXT = 20000               # 送入模型的简历字符上限
-
-
-def guard(req: Request) -> JSONResponse | None:
-    """访问码 + 限流前置校验，放行返回 None（与 main.py 行为一致）。"""
-    if not check_access_code(req.headers.get("x-access-code", "")):
-        return JSONResponse({"error": "访问码不正确"}, status_code=401)
-    if not limiter.allow(client_ip(req)):
-        return JSONResponse({"error": "请求过于频繁，请稍后再试"}, status_code=429)
-    return None
 
 
 @router.post("/parse")

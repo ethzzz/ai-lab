@@ -157,8 +157,14 @@ cp .env.example .env                              # 填入 QWEN_API_KEY
 
 ## 访问控制
 
+- **强制 C 端登录态**：所有业务功能（聊天 / 简历优化 / 命令获取）只允许 C 端登录用户使用——后端消费 nginx
+  `location ^~ /ailab/` 透传的 `X-Auth-User` 头，仅认 `c:<id>` 前缀（`app/security.py:get_c_user`）；
+  头缺失/为空/`b:<id>`（B 端管理员）/畸形一律 **401**（非 403，前端 `apiJson`/`sse` 收到 401 会自动跳
+  `/games/login?next=/ailab/`）。**fail-closed，无任何绕过开关**；该头由 nginx `proxy_set_header` 显式覆盖，
+  客户端伪造无效，且 uvicorn 只绑 127.0.0.1。**数据暂不按用户隔离**（会话/简历/命令历史仍全体共享，表无 owner 字段）。
+- 校验统一收敛在 `app/security.py:guard`（单点，三处路由共用）：C 端登录 → 访问码 → 限流，顺序执行。
 - 配置 `ACCESS_CODE` 后，`/api/chat`、`/api/models` 需携带正确访问码（否则 401）；聊天页首次打开需输入访问码（存浏览器 localStorage）
-- 每 IP 滑动窗口限流（超限 429）；`/api/health` 保持开放供探活；会话接口与简历优化接口同样需访问码
+- 每 IP 滑动窗口限流（超限 429）；`/api/health` 保持开放供探活（匿名可访问，每日巡检依赖）；会话接口与简历优化接口同样需访问码
 
 ## 服务器部署（生产）
 
@@ -166,6 +172,8 @@ cp .env.example .env                              # 填入 QWEN_API_KEY
 - 发布流程：`cd frontend && npm install && npm run build` → 产物 `app/static/dist` → `pm2 restart ai-lab`
 - 启动：`pm2 start /root/ai-lab/.venv/bin/uvicorn --interpreter /root/ai-lab/.venv/bin/python --name ai-lab --cwd /root/ai-lab -- app.main:app --host 127.0.0.1 --port 8002`（必须指定 --interpreter，否则 pm2 会用 Node 执行 Python 脚本报 SyntaxError）
 - `.env` 仅存在于服务器，不入库
+- 登录门禁在上游：nginx `/ailab/` 已做 SSO（`auth_request` → Java `/api/auth/verify`，未登录直接 302 到
+  `/games/login`），后端再强制校验 C 端身份；本次改造为**纯后端**，无需重新构建前端
 
 ## API
 
