@@ -23,14 +23,16 @@ pm2 start /root/ai-lab/.venv/bin/uvicorn --interpreter /root/ai-lab/.venv/bin/py
 ```
 **必须带 `--interpreter`**，否则 pm2 会用 Node 去执行 Python 脚本，报 SyntaxError。
 
-## 构建与发布（只有改前端才需要构建）
+## 构建与发布（本地改 → 服务器从 git 同步；只有改前端才需要构建）
 ```bash
-ssh myapp
-cd /root/ai-lab/frontend && npm install && npm run build   # → ../app/static/dist
-pm2 restart ai-lab                                          # 单进程：uvicorn 同时服务 API 与静态产物
+# 本地：改完提交推送 → 服务器：同步 +（改了 frontend 才）构建 + 重启
+git push origin main
+ssh myapp "/root/notelab-java/ops/sync-deploy.sh ai-lab"
 ```
-- 产物 `app/static/dist/` 已入 `.gitignore`，不入库。
-- 纯后端改动（含访问控制）**不需要重新构建前端**，`pm2 restart ai-lab` 即可。
+- 脚本按变更路径判断：变更落在 `frontend/` 下才构建前端（`cd frontend && npm install && npm run build` → `../app/static/dist`），否则**只重启**——也就是下面"纯后端改动不需重新构建"这条已被脚本自动照顾到。完整行为与参数见根 `AGENTS.md`「开发流程」。
+- **不要在 `/root/ai-lab` 里手改代码**——服务器是只读部署目标；脚本发现工作区脏会直接拒绝执行。
+- 构建产物 `app/static/dist/` 已入 `.gitignore`，不入库；因此**改了前端若只 `git pull` 不构建，线上不会变**（脚本正是为补齐这一步而存在）。
+- 重启后脚本探活 `http://127.0.0.1:8002/`。启动命令**必须带 `--interpreter`**（见上）。
 
 ## 四个「改了必炸」的约定
 1. **前端必须用 `HashRouter`，不能换成 `BrowserRouter`**。nginx 只把 `/` 交给 FastAPI，真实深层路径（如 `/ailab/resume`）会 404；而 hash 位于 `#` 之后，服务端永远只收到 `/ailab/`，因此无需 SPA 回退、也无需改 nginx。路由表在 `frontend/src/routes.ts`。
@@ -50,4 +52,4 @@ pm2 restart ai-lab                                          # 单进程：uvicor
 - `.env` **只存在于服务器**，不入库；`QWEN_API_KEY` 严禁硬编码或提交。
 - LLM 调用统一走 OpenAI 兼容网关（`LLM_BASE_URL` + `LLM_MODEL`，默认 token-plan + `qwen3.8-max`）；`qwen3` 系列生成**结构化长输出时要关思考链**（`enable_thinking=false`），否则会在出结果前长时间思考导致超时。
 - 不动 `notelab-java` / `notelab-b` / `notelab-c` / `myapp` / 旧 Python 版 `notelab`。
-- 本目录是**镜像**：真正生效的代码在服务器 `/root/ai-lab`。别只在本地改。
+- 本目录是本地工作副本，**改这里**；服务器 `/root/ai-lab` 是只读部署目标（由 `ops/sync-deploy.sh ai-lab` 从 git 拉取）。别去服务器上改。
