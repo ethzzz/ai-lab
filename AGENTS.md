@@ -29,7 +29,7 @@ pm2 start /root/ai-lab/.venv/bin/uvicorn --interpreter /root/ai-lab/.venv/bin/py
 git push origin main
 ssh myapp "/root/notelab-java/ops/sync-deploy.sh ai-lab"
 ```
-- 脚本按变更路径判断：变更落在 `frontend/` 下才构建前端（`cd frontend && npm install && npm run build` → `../app/static/dist`），否则**只重启**——也就是下面"纯后端改动不需重新构建"这条已被脚本自动照顾到。完整行为与参数见根 `AGENTS.md`「开发流程」。
+- 脚本按变更路径判断：变更落在 `frontend/` 下才构建前端（`cd frontend && npm install && npm run build` → `../app/static/dist`），否则**只重启**——即"纯后端改动（含访问控制）不需要重新构建前端"这条约定已由脚本自动执行，不用再记。完整行为与参数见根 `AGENTS.md`「开发流程」。
 - **不要在 `/root/ai-lab` 里手改代码**——服务器是只读部署目标；脚本发现工作区脏会直接拒绝执行。
 - 构建产物 `app/static/dist/` 已入 `.gitignore`，不入库；因此**改了前端若只 `git pull` 不构建，线上不会变**（脚本正是为补齐这一步而存在）。
 - 重启后脚本探活 `http://127.0.0.1:8002/`。启动命令**必须带 `--interpreter`**（见上）。
