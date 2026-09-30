@@ -12,7 +12,7 @@ LLM 应用练习场，三个并列工具：**聊天** `/#/chat`、**简历优化
 | pm2 进程 | `ai-lab` |
 | 端口 | **127.0.0.1:8002**（只绑本地） |
 | nginx | `location ^~ /ailab/`，**剥离前缀**转发，并挂 SSO 门禁 |
-| 线上入口 | http://117.72.32.87/ailab/ |
+| 线上入口 | https://haolo.cloud/ailab/ |
 | GitHub | `git@github.com:ethzzz/ai-lab.git`（main） |
 | 数据 | SQLite `/root/ai-lab/data/ai-lab.db`（会话 / 简历 / 命令历史） |
 
