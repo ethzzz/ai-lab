@@ -6,3 +6,7 @@ __pycache__/
 data/
 frontend/node_modules/
 app/static/dist/
+
+# AI 助手本地工作数据（会话/记忆/工具状态，含本机绝对路径，严禁入库）
+.workbuddy/
+.qoder/
