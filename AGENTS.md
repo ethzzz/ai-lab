@@ -41,7 +41,10 @@ ssh myapp "/root/notelab-java/ops/sync-deploy.sh ai-lab"
 4. **顶栏「返回主页」必须是原生锚点 `<a href="/">`**，不能用 react-router 的 `Link`（`Link` 只在 hash 应用内导航，会被重定向回 `/#/chat`）。
 
 ## 访问控制（fail-closed，别加绕过开关）
-- nginx `location ^~ /ailab/` 用 `auth_request` 调 Java `GET /api/auth/verify`，未登录 302 到 `/games/login?next=`；通过时透传 `X-Auth-User` 头。
+- nginx `location ^~ /ailab/` 用 `auth_request` 调 Java `GET /api/auth/verify`，未登录 302 到 `/login?next=`；通过时透传 `X-Auth-User` 头。
+  ⚠️ 登录页路径是 `/login`（C 端顶层路由）。**`/games/login` 是 404** —— `/games` 只是 notelab-c 的 basePath，
+  C 端并没有 `/login` 子路由。两处都要用 `/login`：nginx `@ailab_login`（2026-09-27 已修）和前端 401 回调
+  `gotoLogin()`（2026-10-09 才修，之前漏改导致会话过期时跳 404）。
 - 后端消费该头，**只认 `c:<id>` 前缀**（`app/security.py:get_c_user`）；头缺失 / 为空 / `b:<id>`（B 端管理员）/ 畸形一律返回 **401**（非 403）。该头由 nginx `proxy_set_header` 显式覆盖，客户端伪造无效；uvicorn 又只绑 127.0.0.1，无法绕过。
 - 校验收敛在 `app/security.py:guard` 单点：C 端登录 → 访问码 → 限流，顺序执行。**新增业务路由必须挂这个 guard**。
 - `/api/health` 保持开放（匿名可访问），每日巡检依赖它探活。

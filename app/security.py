@@ -65,7 +65,8 @@ def guard(req: Request) -> JSONResponse | None:
     """统一前置校验（全站业务 API 共用）：C 端登录 → 访问码 → 限流，放行返回 None。
 
     fail-closed：身份头缺失/为空/非 `c:` 前缀一律拒绝，且用 401（非 403）——前端
-    `apiJson` / `sse` 已有「401 → 跳 /games/login」处理，可自动触发重新登录。
+    `apiJson` / `sse` 已有「401 → 跳 /login」处理，可自动触发重新登录。
+    ⚠️ 登录页是 `/login`，不是 `/games/login`（后者 404，见 frontend/src/api/client.ts:gotoLogin）。
     """
     if get_c_user(req) is None:
         return JSONResponse({"error": "需要 C 端账号登录后使用"}, status_code=401)
