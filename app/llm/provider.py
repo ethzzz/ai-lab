@@ -9,6 +9,8 @@ class ChatProvider(ABC):
     name: str = "base"
 
     @abstractmethod
-    async def chat_stream(self, messages: list[dict]) -> AsyncIterator[str]:
-        """按序产出增量文本片段（delta）。"""
+    async def chat_stream(
+        self, messages: list[dict], usage_out: dict | None = None
+    ) -> AsyncIterator[str]:
+        """按序产出增量文本片段（delta）；usage_out 非空时由实现回填 token 用量。"""
         raise NotImplementedError

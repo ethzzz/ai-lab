@@ -8,13 +8,14 @@
 - 业务 API 统一走 app.security.guard：强制 C 端登录（X-Auth-User）+ 访问码 + 限流；/api/health 开放
 """
 import json
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import store
+from . import quota, store
 from .cmdgen import store as cmdgen_store
 from .cmdgen.router import router as cmdgen_router
 from .config import get_settings
@@ -22,7 +23,9 @@ from .llm.qwen import QwenProvider
 from .prompts.templates import TEMPLATES
 from .resume import store as resume_store
 from .resume.router import router as resume_router
-from .security import guard
+from .security import get_c_user, guard
+
+log = logging.getLogger("ai-lab")
 
 DIST = Path(__file__).parent / "static" / "dist"
 
@@ -63,6 +66,10 @@ async def chat(req: Request):
     denied = guard(req)
     if denied:
         return denied
+    uid = get_c_user(req)
+    if uid is None:
+        return JSONResponse({"error": "需要 C 端账号登录后使用"}, status_code=401)
+
     body = await req.json()
     template = TEMPLATES.get(body.get("template") or "default", TEMPLATES["default"])
     messages = [
@@ -72,21 +79,31 @@ async def chat(req: Request):
     ]
     full = [{"role": "system", "content": template["system"]}, *messages]
 
-    # 会话落库：用户消息先存，助手回复在流结束后存（仅存最新一轮，历史由前端全量上送）
+    # 会话落库：先只校验会话存在；用户消息在额度预占成功后再写，避免「额度已满却留下半轮对话」
     session_id = body.get("session_id")
     last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
     if session_id is not None:
         if not store.session_exists(int(session_id)):
             return JSONResponse({"error": "会话不存在"}, status_code=404)
         session_id = int(session_id)
-        if last_user:
-            store.add_message(session_id, "user", last_user)
-            store.touch_session(session_id, last_user)
+
+    # 额度：请求次数在调用前预占；token 在流结束后按 usage 累加。
+    try:
+        quota.reserve(uid)
+    except quota.QuotaExceeded as e:
+        return JSONResponse({"error": str(e)}, status_code=429)
+
+    if session_id is not None and last_user:
+        store.add_message(session_id, "user", last_user)
+        store.touch_session(session_id, last_user)
+
+    usage: dict = {}
+    prompt_text = "\n".join(m["content"] for m in full)
 
     async def event_stream():
         answer = ""
         try:
-            async for delta in provider.chat_stream(full):
+            async for delta in provider.chat_stream(full, usage):
                 answer += delta
                 yield f"data: {json.dumps({'delta': delta}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
@@ -94,12 +111,29 @@ async def chat(req: Request):
                 store.add_message(session_id, "assistant", answer)
         except Exception as e:  # 网关/限流等错误以 SSE 事件透出，前端可展示
             yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+        finally:
+            # 客户端断开/上游报错也要记：失败请求同样消耗 provider 额度
+            try:
+                quota.record_tokens(uid, usage, prompt_text, answer)
+            except Exception as e:  # 记账失败不掩盖原始错误
+                log.warning("记录 AI 用量失败：%s", e)
 
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.get("/api/quota")
+async def quota_status(req: Request):
+    denied = guard(req)
+    if denied:
+        return denied
+    uid = get_c_user(req)
+    if uid is None:
+        return JSONResponse({"error": "需要 C 端账号登录后使用"}, status_code=401)
+    return quota.status(uid)
 
 
 # ================= 会话持久化 =================
