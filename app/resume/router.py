@@ -6,8 +6,11 @@
 from fastapi import APIRouter, File, Request, UploadFile
 from fastapi.responses import JSONResponse
 
+import json
+
+from .. import quota
 from ..config import get_settings
-from ..security import guard
+from ..security import get_c_user, guard
 from . import optimizer, parser, store
 
 router = APIRouter(prefix="/api/resume", tags=["resume"])
@@ -49,12 +52,33 @@ async def optimize(req: Request):
         return JSONResponse({"error": "简历内容为空"}, status_code=400)
     if len(text) > MAX_TEXT:
         return JSONResponse({"error": f"简历内容过长（>{MAX_TEXT} 字），请精简后重试"}, status_code=400)
+
+    uid = get_c_user(req)
+    if uid is None:
+        return JSONResponse({"error": "需要 C 端账号登录后使用"}, status_code=401)
     try:
-        result = await optimizer.optimize(text)
+        quota.reserve(uid)
+    except quota.QuotaExceeded as e:
+        return JSONResponse({"error": str(e)}, status_code=429)
+
+    usage: dict = {}
+    result = None
+    try:
+        result = await optimizer.optimize(text, usage)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=422)
     except Exception as e:
         return JSONResponse({"error": f"请求模型出错：{e}"}, status_code=502)
+    finally:
+        try:
+            quota.record_tokens(
+                uid,
+                usage,
+                optimizer.SYSTEM_PROMPT + "\n" + text,
+                json.dumps(result or {}, ensure_ascii=False),
+            )
+        except Exception:
+            pass  # 记账失败不掩盖业务结果
     rid = store.create(title, source_name, text, result, get_settings().llm_model)
     return {"id": rid, "summary": result["summary"], "segments": result["segments"]}
 

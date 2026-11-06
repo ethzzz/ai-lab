@@ -25,14 +25,14 @@ SYSTEM_PROMPT = (
 )
 
 
-async def optimize(text: str) -> dict:
+async def optimize(text: str, usage_out: dict | None = None) -> dict:
     """流式收集 LLM 输出 → 容错解析 → 返回 {summary, segments}；异常抛 ValueError。"""
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": text},
     ]
     buf = ""
-    async for delta in _provider.chat_stream(messages, enable_thinking=False):
+    async for delta in _provider.chat_stream(messages, usage_out, enable_thinking=False):
         buf += delta
     return _parse_result(buf)
 

@@ -51,6 +51,13 @@ ssh myapp "/root/notelab-java/ops/sync-deploy.sh ai-lab"
 - **数据暂未按用户隔离**：会话 / 简历 / 命令历史仍全体共享，表无 owner 字段。要隔离需先加字段 + 迁移。
 - `ACCESS_CODE` 为空即不校验访问码（服务器已置空，登录态由 nginx SSO 负责）。
 
+## AI 每日额度（2026-11-06）
+- 聊天 / 简历优化 / 命令生成三个 LLM 入口**共用**一份日额度：每 C 用户 20 次、10 万 tokens；全站 300 次、200 万 tokens。
+- 账本在 SQLite `llm_usage_daily`（`uid='*'` 是全站汇总行）：请求在调用前预占（失败也计一次），token 在流结束后按 provider usage 累加，拿不到 usage 时按字符估算。
+- 超限返回 **429** + 中文原因（`今日 AI 对话次数已用完…明天 0 点恢复`）；`GET /api/quota` 返回当前用户/全站的限额、今日用量与剩余。
+- 调整额度只改服务器 `.env` 的 `DAILY_REQUESTS_PER_USER` / `DAILY_TOKENS_PER_USER` / `DAILY_REQUESTS_GLOBAL` / `DAILY_TOKENS_GLOBAL`，重启 ai-lab 生效；0 表示该维度不限制。
+- 已知边界：token 上限是「调用前检查」，单个超长回复可能让当日用量略超上限一次；不做中途截断。
+
 ## 纪律与禁区
 - `.env` **只存在于服务器**，不入库；`QWEN_API_KEY` 严禁硬编码或提交。
 - LLM 调用统一走 OpenAI 兼容网关（`LLM_BASE_URL` + `LLM_MODEL`，默认 token-plan + `qwen3.8-max`）；`qwen3` 系列生成**结构化长输出时要关思考链**（`enable_thinking=false`），否则会在出结果前长时间思考导致超时。
